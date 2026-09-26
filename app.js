@@ -34,9 +34,12 @@
 
   /* ---------- Almacenamiento ---------- */
   const KEY = 'sqlingo-v1';
-  const defaults = { xp: 0, streak: 0, lastDay: null, done: {}, missed: [], sound: true };
+  const defaults = { xp: 0, streak: 0, lastDay: null, done: {}, missed: [], sound: true,
+    stats: {}, cases: {}, boltBest: 0, examDate: null, goal: 50, day: null };
   let S = { ...defaults };
-  try { S = { ...defaults, ...JSON.parse(localStorage.getItem(KEY) || '{}') }; } catch (e) { /* sin storage */ }
+  try { S = { ...defaults, stats: {}, cases: {}, ...JSON.parse(localStorage.getItem(KEY) || '{}') }; } catch (e) { /* sin storage */ }
+  // Fecha local (no UTC) para que la racha cambie a medianoche en tu hora
+  const localDay = (d = new Date()) => new Date(d.getTime() - d.getTimezoneOffset() * 6e4).toISOString().slice(0, 10);
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* ignore */ } };
 
   /* ---------- Resaltado de SQL ---------- */
@@ -126,11 +129,17 @@
   const Q_BY_ID = Object.fromEntries(ALL_Q.map((q) => [q.id, q]));
   const TOTAL_LESSONS = UNITS.reduce((s, u) => s + u.lessons.length, 0);
 
+  const STORY_UNIT = { socio: 'err', farmacia: 'err', clinica: 'sp', libreta: 'cur', cine: 'fn', apagon: 'tx', hotel: 'trg', gym: 'trg' };
+  // Trucos al inicio de cada guía
+  UNITS.forEach((u) => {
+    if (TIPS[u.id]) u.cheat.unshift({ h: '🧠 Trucos para recordar', p: '<ul class="tips">' + TIPS[u.id].map((t) => `<li>${t}</li>`).join('') + '</ul>' });
+  });
   // Historias: los diálogos vienen como arreglos ['personaje', 'texto', 'código?']
   STORIES.forEach((st) => {
     st.steps = st.steps.map((x, i) => {
       const step = Array.isArray(x) ? { t: 'say', s: x[0], text: x[1], code: x[2] } : x;
       step.id = `st-${st.id}-${i}`;
+      step.unitId = STORY_UNIT[st.id];
       return step;
     });
     st.nQs = st.steps.filter((x) => x.t !== 'say').length;
@@ -145,6 +154,7 @@
   function renderHome() {
     $('#xp').textContent = S.xp;
     $('#streak').textContent = S.streak;
+    renderGoal();
     $('#soundBtn').textContent = S.sound ? '🔊' : '🔇';
 
     const doneCount = Object.keys(S.done).length;
@@ -233,7 +243,7 @@
   $('#examBtn').onclick = () => startLesson(shuffle(ALL_Q.filter((q) => q.unit.id !== 'bd')).slice(0, 20), { mode: 'exam', title: 'Simulacro' });
   $('#reviewBtn').onclick = () => startLesson(shuffle(S.missed.map((id) => Q_BY_ID[id])).slice(0, 12), { mode: 'review', title: 'Repaso' });
   $('#resetBtn').onclick = () => {
-    if (confirm('¿Borrar todo tu progreso (XP, racha y lecciones)?')) { S = { ...defaults, done: {}, missed: [] }; save(); renderHome(); }
+    if (confirm('¿Borrar todo tu progreso (XP, racha y lecciones)?')) { S = { ...defaults, done: {}, missed: [], stats: {}, cases: {} }; save(); renderHome(); }
   };
 
   /* =========================================================
@@ -243,7 +253,7 @@
   let cur = null;   // controlador de la pregunta actual
 
   function show(id) {
-    ['home', 'lesson', 'result'].forEach((s) => $('#' + s).classList.toggle('hidden', s !== id));
+    ['home', 'lesson', 'result', 'cases', 'flash', 'bolt', 'stats'].forEach((s) => $('#' + s).classList.toggle('hidden', s !== id));
     window.scrollTo(0, 0);
   }
 
@@ -353,6 +363,7 @@
       return nextQuestion();
     }
     const res = cur.check();
+    track(q, res.ok);
     L.queue.shift();
     L.answered++;
 
@@ -397,6 +408,10 @@
       }
     }
     if (q.ex) body.appendChild(el('div', 'ex', '💡 ' + q.ex));
+    else if (!res.ok) {
+      const tip = randomTip(q.unit ? q.unit.id : q.unitId);
+      if (tip) body.appendChild(el('div', 'ex', '🧠 ' + tip));
+    }
     save();
     updateBar();
     sheet.classList.add('show');
@@ -467,8 +482,8 @@
       }
     }
 
-    if (xp > 0 || completed) bumpStreak();
-    S.xp += xp;
+    if (completed) bumpStreak();
+    addXp(xp);
     save();
 
     $('#resEmoji').textContent = emoji;
@@ -486,9 +501,9 @@
 
   function bumpStreak() {
     const d = new Date();
-    const today = d.toISOString().slice(0, 10);
+    const today = localDay(d);
     if (S.lastDay === today) return;
-    const y = new Date(d.getTime() - 864e5).toISOString().slice(0, 10);
+    const y = localDay(new Date(d.getTime() - 864e5));
     S.streak = S.lastDay === y ? S.streak + 1 : 1;
     S.lastDay = today;
   }
@@ -807,6 +822,400 @@
       return ctl;
     },
   };
+
+
+  /* =========================================================
+     META DIARIA, FECHA DEL EXAMEN Y ESTADÍSTICAS
+     ========================================================= */
+  function addXp(n) {
+    if (n <= 0) return;
+    const t = localDay();
+    if (!S.day || S.day.d !== t) S.day = { d: t, xp: 0 };
+    S.day.xp += n;
+    S.xp += n;
+    bumpStreak();
+    save();
+  }
+  function track(q, ok) {
+    const uid = q.unit ? q.unit.id : q.unitId;
+    if (!uid) return;
+    const st = S.stats[uid] || (S.stats[uid] = { ok: 0, n: 0 });
+    st.n++; if (ok) st.ok++;
+  }
+  const randomTip = (uid) => {
+    const t = TIPS[uid];
+    return t ? t[Math.floor(Math.random() * t.length)] : null;
+  };
+
+  function renderGoal() {
+    const today = localDay();
+    const xp = S.day && S.day.d === today ? S.day.xp : 0;
+    $('#goalTxt').textContent = `${Math.min(xp, S.goal)} / ${S.goal} XP` + (xp >= S.goal ? ' ✅' : '');
+    $('#goalBar').style.width = Math.min(100, xp / S.goal * 100) + '%';
+    const inp = $('#examDate');
+    inp.value = S.examDate || '';
+    let txt = '📅 Toca aquí y pon la fecha de tu examen';
+    if (S.examDate) {
+      const days = Math.round((new Date(S.examDate + 'T00:00') - new Date(today + 'T00:00')) / 864e5);
+      txt = days > 1 ? `📅 Faltan <b>${days} días</b> para tu examen`
+        : days === 1 ? '📅 ¡Tu examen es <b>mañana</b>! Haz un simulacro 💪'
+        : days === 0 ? '📅 ¡Hoy es el examen! Tú puedes 🍀'
+        : '📅 El examen ya pasó · toca para cambiar la fecha';
+    }
+    $('#countTxt').innerHTML = txt;
+  }
+  $('#examDate').addEventListener('change', (e) => { S.examDate = e.target.value || null; save(); renderGoal(); });
+  $('.countdown').addEventListener('click', () => { try { $('#examDate').showPicker(); } catch (e) { /* móvil abre solo */ } });
+
+  document.querySelectorAll('[data-home]').forEach((b) => b.addEventListener('click', goHome));
+  function goHome() {
+    stopBolt();
+    L = null;
+    renderHome();
+    show('home');
+  }
+
+  /* ---------- Progreso ---------- */
+  $('#toolStats').onclick = () => { renderStats(); show('stats'); };
+  function renderStats() {
+    const body = $('#statsBody');
+    body.innerHTML = '';
+    const tot = Object.values(S.stats).reduce((a, s) => ({ ok: a.ok + s.ok, n: a.n + s.n }), { ok: 0, n: 0 });
+    const casesDone = Object.values(S.cases).filter((c) => c.rating).length;
+    body.appendChild(el('div', 'stat-grid',
+      `<div><b>${tot.n}</b><small>respondidas</small></div>
+       <div><b>${tot.n ? Math.round(tot.ok / tot.n * 100) : 0}%</b><small>precisión</small></div>
+       <div><b>${S.streak}🔥</b><small>racha</small></div>
+       <div><b>${S.boltBest}⚡</b><small>récord relámpago</small></div>
+       <div><b>${casesDone}/${CASES.length}</b><small>casos escritos</small></div>
+       <div><b>${S.xp}</b><small>XP total</small></div>`));
+
+    const rows = UNITS.map((u) => {
+      const st = S.stats[u.id] || { ok: 0, n: 0 };
+      return { u, st, pct: st.n ? Math.round(st.ok / st.n * 100) : null };
+    }).sort((a, b) => (a.pct == null) - (b.pct == null) || (a.pct - b.pct));
+
+    const weak = rows.find((r) => r.pct != null && r.pct < 80);
+    if (weak) {
+      const w = el('div', `weak c-${weak.u.color}`,
+        `<div><small>Tu tema más débil</small><b>${weak.u.icon} ${esc(weak.u.title)} · ${weak.pct}%</b><p>${randomTip(weak.u.id) || ''}</p></div>`);
+      const b = el('button', 'btn', 'Practicar ahora');
+      b.onclick = () => practiceUnit(weak.u);
+      w.appendChild(b);
+      body.appendChild(w);
+    } else if (tot.n) {
+      body.appendChild(el('p', 'muted-p', '¡Vas por encima del 80 % en todo lo que practicaste! 🎉'));
+    } else {
+      body.appendChild(el('p', 'muted-p', 'Todavía no hay datos. Haz algunas lecciones y aquí verás tus temas débiles.'));
+    }
+
+    body.appendChild(el('h3', 'sec-title', 'Por tema <small>ordenado del más débil al más fuerte</small>'));
+    rows.forEach(({ u, st, pct }) => {
+      const r = el('div', 'topic-row');
+      const color = pct == null ? 'var(--border)' : pct >= 80 ? 'var(--green)' : pct >= 60 ? 'var(--yellow)' : 'var(--red)';
+      r.innerHTML = `<div class="tr-head"><span>${u.icon} ${esc(u.title)}</span><b>${pct == null ? '—' : pct + '%'}</b></div>
+        <div class="bar"><i style="width:${pct || 0}%;background:${color}"></i></div>
+        <small>${st.n ? `${st.ok} de ${st.n} correctas` : 'sin practicar'}</small>`;
+      const b = el('button', 'mini-btn', 'Practicar');
+      b.onclick = () => practiceUnit(u);
+      r.appendChild(b);
+      body.appendChild(r);
+    });
+  }
+  function practiceUnit(u) {
+    startLesson(shuffle(u.qs).slice(0, 10), { mode: 'lesson', title: u.title });
+  }
+
+  /* =========================================================
+     ESCRIBE EL CASO (modo examen)
+     ========================================================= */
+  const unitById = (id) => UNITS.find((u) => u.id === id);
+  $('#toolCases').onclick = () => { renderCaseList(); show('cases'); };
+  $('#cases [data-back]').onclick = () => {
+    if (!$('#caseDetail').classList.contains('hidden')) { renderCaseList(); window.scrollTo(0, 0); }
+    else goHome();
+  };
+  const RATE = { bad: '😣', mid: '😐', good: '😎' };
+
+  function renderCaseList() {
+    $('#caseDetail').classList.add('hidden');
+    const list = $('#caseList');
+    list.classList.remove('hidden');
+    list.innerHTML = '';
+    list.appendChild(el('p', 'muted-p', 'Lee el enunciado, mira las tablas y escribe el código <b>completo</b>, como en el examen. Luego compara con la solución.'));
+    CASES.forEach((c) => {
+      const u = unitById(c.unit);
+      const db = c.db ? DBS[c.db] : { icon: '🗄️', name: 'BD Negocios' };
+      const st = S.cases[c.id] || {};
+      const b = el('button', 'case-item',
+        `<span class="ci-ico c-${u.color}">${db.icon}</span>
+         <span class="ci-txt"><b>${esc(c.title)}</b><small>${u.icon} ${esc(u.title)} · ${esc(db.name)}</small></span>
+         <span class="ci-st">${st.rating ? RATE[st.rating] : st.draft ? '📝' : ''}</span>`);
+      b.onclick = () => openCase(c);
+      list.appendChild(b);
+    });
+  }
+
+  function openCase(c) {
+    const u = unitById(c.unit);
+    $('#caseList').classList.add('hidden');
+    const d = $('#caseDetail');
+    d.classList.remove('hidden');
+    d.innerHTML = '';
+    window.scrollTo(0, 0);
+    const st = S.cases[c.id] || (S.cases[c.id] = {});
+
+    d.appendChild(el('div', `st-title c-${u.color}`, `<span>${u.icon}</span><div><small>${esc(u.title)}</small><b>${esc(c.title)}</b></div>`));
+    d.appendChild(el('p', 'case-text', c.text));
+    if (c.db) d.appendChild(dbCard(c.db, true));
+    else {
+      const det = el('details', 'dbcard');
+      det.appendChild(el('summary', null, '<span>🗄️</span> <b>BD Negocios</b> <small>· ver tablas</small>'));
+      det.appendChild(codeBlock(unitById('bd').cheat[0].code));
+      d.appendChild(det);
+    }
+
+    const ta = el('textarea', 'write case-code');
+    ta.placeholder = 'Escribe aquí tu código completo…';
+    ta.setAttribute('autocapitalize', 'off');
+    ta.setAttribute('autocorrect', 'off');
+    ta.spellcheck = false;
+    ta.value = st.draft || '';
+    ta.oninput = () => { st.draft = ta.value; save(); };
+    d.appendChild(ta);
+
+    const tplSec = u.cheat.find((x) => x.h.startsWith('🧩'));
+    const row = el('div', 'case-btns');
+    if (tplSec) {
+      const hb = el('button', 'btn ghost-b', '💡 Ver plantilla');
+      hb.onclick = () => {
+        if (d.querySelector('.case-tpl')) return;
+        const box = el('div', 'case-tpl', '<b>Plantilla</b>');
+        box.appendChild(codeBlock(tplSec.code));
+        ta.before(box);
+      };
+      row.appendChild(hb);
+    }
+    const sb = el('button', 'btn primary', '👀 Corregir');
+    sb.onclick = () => revealCase(c, ta, d, row);
+    row.appendChild(sb);
+    d.appendChild(row);
+    d.appendChild(el('p', 'hint', 'Tu borrador se guarda solo, puedes salir y seguir después.'));
+  }
+
+  function revealCase(c, ta, d, row) {
+    row.remove();
+    const code = ta.value.toUpperCase();
+    const res = el('div', 'case-result');
+    let hits = 0;
+    const ul = el('ul', 'checklist');
+    c.check.forEach(([label, re]) => {
+      const ok = new RegExp(re, 'i').test(code);
+      if (ok) hits++;
+      ul.appendChild(el('li', ok ? 'ok' : 'miss', `${ok ? '✅' : '⬜'} ${esc(label)}`));
+    });
+    const pct = hits / c.check.length;
+    res.appendChild(el('h3', null, `${pct === 1 ? '🏆' : pct >= .6 ? '👍' : '📚'} Tu código tiene ${hits} de ${c.check.length} puntos clave`));
+    res.appendChild(ul);
+    res.appendChild(el('p', 'hint', 'La revisión busca las partes clave, no ejecuta el código. Compara con la solución:'));
+    res.appendChild(el('b', null, 'Solución'));
+    res.appendChild(codeBlock(c.solution));
+    const tip = randomTip(c.unit);
+    if (tip) res.appendChild(el('p', 'tip', '🧠 ' + tip));
+    res.appendChild(el('p', 'rate-q', '¿Cómo te fue?'));
+    const rr = el('div', 'rate-btns');
+    [['bad', '😣 Me faltó mucho', 5], ['mid', '😐 Casi', 15], ['good', '😎 Me salió', 30]].forEach(([k, label, xp]) => {
+      const b = el('button', 'btn', label);
+      b.onclick = () => {
+        const st = S.cases[c.id];
+        st.rating = k;
+        addXp(xp);
+        pct === 1 ? sfx.win() : sfx.ok();
+        renderCaseList();
+        window.scrollTo(0, 0);
+      };
+      rr.appendChild(b);
+    });
+    res.appendChild(rr);
+    d.appendChild(res);
+    ta.readOnly = true;
+    res.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  /* =========================================================
+     TARJETAS (flashcards)
+     ========================================================= */
+  let F = null;
+  $('#toolFlash').onclick = () => { renderFlashTopics('all'); startFlash('all'); show('flash'); };
+
+  function renderFlashTopics(active) {
+    const box = $('#flashTopics');
+    box.innerHTML = '';
+    const topics = [['all', '🎲 Todas']].concat(
+      [...new Set(FLASH.map((f) => f.u))].map((id) => { const u = unitById(id); return [id, `${u.icon} ${u.title}`]; }));
+    topics.forEach(([id, label]) => {
+      const b = el('button', 'chip-topic' + (id === active ? ' on' : ''), esc(label));
+      b.onclick = () => { renderFlashTopics(id); startFlash(id); };
+      box.appendChild(b);
+    });
+  }
+  function startFlash(topic, deck) {
+    const pool = deck || shuffle(FLASH.filter((f) => topic === 'all' || f.u === topic)).slice(0, 20);
+    F = { topic, deck: pool, i: 0, known: 0, unknown: [], again: new Set(), total: pool.length };
+    $('#flashEnd').classList.add('hidden');
+    $('#flashPlay').classList.remove('hidden');
+    showCard();
+  }
+  function showCard() {
+    if (F.i >= F.deck.length) return endFlash();
+    const c = F.deck[F.i];
+    const card = $('#flashCard');
+    card.classList.remove('flipped', 'go-l', 'go-r');
+    card.style.transform = '';
+    $('#flashFront').textContent = c.f;
+    const back = $('#flashBack');
+    back.textContent = c.b;
+    back.classList.toggle('mono', looksCode(c.b) || /\n/.test(c.b));
+    $('#flashCount').textContent = `${Math.min(F.i + 1, F.deck.length)} / ${F.deck.length}`;
+  }
+  function flashAnswer(knew) {
+    const c = F.deck[F.i];
+    const card = $('#flashCard');
+    card.classList.add(knew ? 'go-r' : 'go-l');
+    if (knew) { F.known++; sfx.ok(); addXp(1); }
+    else {
+      sfx.bad();
+      if (!F.again.has(c)) { F.again.add(c); F.unknown.push(c); F.deck.push(c); }
+    }
+    F.i++;
+    setTimeout(showCard, 230);
+  }
+  $('#flashYes').onclick = () => flashAnswer(true);
+  $('#flashNo').onclick = () => flashAnswer(false);
+  (() => {
+    const card = $('#flashCard');
+    let x0 = null, dx = 0;
+    card.addEventListener('pointerdown', (e) => { x0 = e.clientX; dx = 0; card.setPointerCapture(e.pointerId); card.classList.add('drag'); });
+    card.addEventListener('pointermove', (e) => {
+      if (x0 == null) return;
+      dx = e.clientX - x0;
+      card.style.transform = `translateX(${dx}px) rotate(${dx / 18}deg)` + (card.classList.contains('flipped') ? ' rotateY(180deg)' : '');
+    });
+    const up = () => {
+      if (x0 == null) return;
+      x0 = null;
+      card.classList.remove('drag');
+      if (dx > 90) flashAnswer(true);
+      else if (dx < -90) flashAnswer(false);
+      else {
+        card.style.transform = '';
+        if (Math.abs(dx) < 8) { card.classList.toggle('flipped'); sfx.tap(); }
+      }
+    };
+    card.addEventListener('pointerup', up);
+    card.addEventListener('pointercancel', up);
+  })();
+  function endFlash() {
+    $('#flashPlay').classList.add('hidden');
+    const e = $('#flashEnd');
+    e.classList.remove('hidden');
+    e.innerHTML = `<div class="result-emoji">${F.unknown.length ? '🧠' : '🏆'}</div>
+      <h2>Sabías ${F.total - F.unknown.length} de ${F.total}</h2>
+      <p class="muted-p">${F.unknown.length ? 'Las que no sabías ya te las repetí una vez. Dales otra vuelta:' : '¡Todas a la primera!'}</p>`;
+    if (F.unknown.length) {
+      const b = el('button', 'btn primary', `Repasar las ${F.unknown.length} que no sabía`);
+      const unk = F.unknown.slice();
+      b.onclick = () => startFlash(F.topic, shuffle(unk));
+      e.appendChild(b);
+    }
+    const again = el('button', 'btn', 'Otra ronda');
+    again.onclick = () => startFlash(F.topic);
+    const home = el('button', 'btn ghost', 'Salir');
+    home.onclick = goHome;
+    e.append(again, home);
+    if (!F.unknown.length) { sfx.win(); confetti(); }
+  }
+
+  /* =========================================================
+     RELÁMPAGO (60 s)
+     ========================================================= */
+  let B = null;
+  const BOLT_MS = 60000;
+  $('#toolBolt').onclick = startBolt;
+  function stopBolt() { if (B && B.timer) clearInterval(B.timer); if (B) B.timer = null; }
+
+  function startBolt() {
+    stopBolt();
+    const pool = shuffle(ALL_Q.filter((q) => (q.t === 'mc' || q.t === 'tf') && !q.db));
+    B = { pool, i: 0, score: 0, wrong: 0, end: Date.now() + BOLT_MS, busy: false };
+    $('#boltScore').textContent = 0;
+    $('#boltEnd').classList.add('hidden');
+    $('#boltArea').classList.remove('hidden');
+    show('bolt');
+    B.timer = setInterval(() => {
+      const left = Math.max(0, B.end - Date.now());
+      $('#boltBar').style.width = (left / BOLT_MS * 100) + '%';
+      $('#boltBar').style.background = left < 10000 ? 'var(--red)' : 'var(--yellow)';
+      if (!left) endBolt();
+    }, 100);
+    nextBolt();
+  }
+  function nextBolt() {
+    if (!B || !B.timer) return;
+    if (B.i >= B.pool.length) { B.pool = shuffle(B.pool); B.i = 0; }
+    const q = B.pool[B.i++];
+    const area = $('#boltArea');
+    area.innerHTML = '';
+    area.style.animation = 'none'; void area.offsetWidth; area.style.animation = '';
+    area.appendChild(el('div', 'q-kind', `${q.unit.icon} ${esc(q.unit.title)}`));
+    area.appendChild(el('p', 'q-text', q.q));
+    if (q.code) area.appendChild(codeBlock(q.code));
+    const box = el('div', q.t === 'tf' ? 'options tf' : 'options');
+    const opts = q.t === 'tf'
+      ? [['✅ Verdadero', true], ['❌ Falso', false]]
+      : shuffle(q.o.map((o, i) => [o, i]));
+    const good = q.a;
+    B.busy = false;
+    const btns = opts.map(([label, val]) => {
+      const b = el('button', 'opt', `<span class="txt${q.t === 'mc' && looksCode(label) ? ' mono' : ''}">${esc(label)}</span>`);
+      b.onclick = () => {
+        if (B.busy) return;
+        B.busy = true;
+        const ok = val === good;
+        track(q, ok);
+        if (ok) { B.score++; b.classList.add('ok'); sfx.ok(); S.missed = S.missed.filter((id) => id !== q.id); }
+        else {
+          B.wrong++; b.classList.add('bad'); sfx.bad();
+          btns.forEach((x, k) => { if (opts[k][1] === good) x.classList.add('ok'); });
+          if (!S.missed.includes(q.id)) S.missed.push(q.id);
+        }
+        $('#boltScore').textContent = B.score;
+        setTimeout(nextBolt, ok ? 300 : 1100);
+      };
+      box.appendChild(b);
+      return b;
+    });
+    area.appendChild(box);
+  }
+  function endBolt() {
+    stopBolt();
+    const newBest = B.score > S.boltBest;
+    if (newBest) S.boltBest = B.score;
+    addXp(B.score * 2);
+    save();
+    $('#boltArea').classList.add('hidden');
+    const e = $('#boltEnd');
+    e.classList.remove('hidden');
+    e.innerHTML = `<div class="result-emoji">${newBest ? '🏆' : '⚡'}</div>
+      <h2>${B.score} correctas en 60 s</h2>
+      <p class="muted-p">${newBest ? '¡Nuevo récord!' : `Tu récord: ${S.boltBest}`} · fallaste ${B.wrong} · +${B.score * 2} XP</p>`;
+    const again = el('button', 'btn primary', 'Otra vez');
+    again.onclick = startBolt;
+    const home = el('button', 'btn ghost', 'Salir');
+    home.onclick = goHome;
+    e.append(again, home);
+    if (newBest && B.score > 0) { sfx.win(); confetti(); }
+  }
 
   /* ---------- Inicio ---------- */
   renderHome();

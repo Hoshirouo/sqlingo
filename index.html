@@ -35,6 +35,22 @@
       <div class="overall"><div class="bar"><i id="overallBar"></i></div><span id="overallTxt">0%</span></div>
     </section>
 
+    <section class="goal">
+      <div class="goal-row"><span>🎯 Meta de hoy</span><b id="goalTxt">0 / 50 XP</b></div>
+      <div class="bar"><i id="goalBar"></i></div>
+      <label class="countdown">
+        <span id="countTxt">📅 Toca aquí y pon la fecha de tu examen</span>
+        <input type="date" id="examDate" aria-label="Fecha del examen">
+      </label>
+    </section>
+
+    <section class="tools">
+      <button class="tool c-purple" id="toolCases"><span>✍️</span><b>Escribe el caso</b><small>Como en el examen</small></button>
+      <button class="tool c-blue" id="toolFlash"><span>🃏</span><b>Tarjetas</b><small>Voltea y recuerda</small></button>
+      <button class="tool c-yellow" id="toolBolt"><span>⚡</span><b>Relámpago</b><small>60 segundos</small></button>
+      <button class="tool c-green" id="toolStats"><span>📊</span><b>Mi progreso</b><small>Temas débiles</small></button>
+    </section>
+
     <section class="quick">
       <button class="card-btn exam" id="examBtn">
         <span class="ico">📝</span>
@@ -103,6 +119,48 @@
     <canvas id="confetti"></canvas>
   </main>
 
+  <!-- ============ ESCRIBE EL CASO ============ -->
+  <main id="cases" class="screen hidden">
+    <header class="sub-top"><button class="icon-btn" data-back aria-label="Volver">←</button><h2 id="casesTitle">✍️ Escribe el caso</h2></header>
+    <div id="caseList"></div>
+    <div id="caseDetail" class="hidden"></div>
+  </main>
+
+  <!-- ============ TARJETAS ============ -->
+  <main id="flash" class="screen hidden">
+    <header class="sub-top"><button class="icon-btn" data-home aria-label="Volver">←</button><h2>🃏 Tarjetas</h2><span class="flash-count" id="flashCount"></span></header>
+    <div class="chips" id="flashTopics"></div>
+    <div id="flashPlay">
+      <div class="card3d" id="flashCard">
+        <div class="face front"><small>Pregunta</small><div id="flashFront"></div><em>Toca para voltear</em></div>
+        <div class="face back"><small>Respuesta</small><div id="flashBack"></div></div>
+      </div>
+      <p class="swipe-hint">Desliza → <b>sabía</b> · ← <b>no sabía</b></p>
+      <div class="flash-btns">
+        <button class="btn danger" id="flashNo">✖ No sabía</button>
+        <button class="btn primary" id="flashYes">✔ Sabía</button>
+      </div>
+    </div>
+    <div id="flashEnd" class="end-panel hidden"></div>
+  </main>
+
+  <!-- ============ RELÁMPAGO ============ -->
+  <main id="bolt" class="screen hidden">
+    <header class="lesson-top">
+      <button class="icon-btn close" data-home aria-label="Salir">✕</button>
+      <div class="bar big bolt-bar"><i id="boltBar"></i></div>
+      <span class="bolt-score">⚡<b id="boltScore">0</b></span>
+    </header>
+    <section id="boltArea" class="q-area"></section>
+    <div id="boltEnd" class="end-panel hidden"></div>
+  </main>
+
+  <!-- ============ PROGRESO ============ -->
+  <main id="stats" class="screen hidden">
+    <header class="sub-top"><button class="icon-btn" data-home aria-label="Volver">←</button><h2>📊 Mi progreso</h2></header>
+    <div id="statsBody"></div>
+  </main>
+
   <!-- ============ CHULETA ============ -->
   <div class="modal hidden" id="cheat">
     <div class="modal-card">
@@ -129,6 +187,7 @@
   <script src="dbs.js"></script>
   <script src="extra.js"></script>
   <script src="stories.js"></script>
+  <script src="practice.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
