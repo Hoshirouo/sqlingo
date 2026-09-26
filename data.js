@@ -13,7 +13,7 @@
 const UNITS = [
 /* ───────────────────────── 0 · BD NEGOCIOS ───────────────────────── */
 {
-  id: 'bd', title: 'La BD Negocios', sub: 'Esquemas y tablas', icon: '🗄️', color: 'blue',
+  id: 'bd', title: 'BD de clase: Negocios', sub: 'Esquemas y tablas', icon: '🗄️', color: 'blue',
   cheat: [
     { h: 'Esquemas', p: 'La BD <b>Negocios</b> tiene 3 esquemas: <b>Ventas</b>, <b>Compras</b> y <b>RRHH</b>. Siempre escribe <code>esquema.tabla</code>.',
       code:

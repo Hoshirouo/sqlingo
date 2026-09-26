@@ -404,3 +404,20 @@ textarea.write:focus { border-color: var(--blue); }
 .story-q { border-top: 2px dashed var(--border); border-bottom: 2px dashed var(--border); padding: 16px 0 18px; margin: 6px 0 18px; animation: up .3s ease-out; }
 .story-q.frozen { opacity: .6; pointer-events: none; }
 .story-q.frozen .hint { display: none; }
+
+/* ================= Esquema de BD ================= */
+.dbcard { border: 2px solid var(--blue); border-radius: 14px; background: var(--blue-bg); margin: 0 0 16px; overflow: hidden; }
+.dbcard summary { cursor: pointer; padding: 10px 14px; font-size: 15px; color: var(--blue-d); list-style: none; display: flex; align-items: center; gap: 6px; }
+.dbcard summary::-webkit-details-marker { display: none; }
+.dbcard summary::after { content: '▾'; margin-left: auto; transition: transform .2s; }
+.dbcard[open] summary::after { transform: rotate(180deg); }
+.dbcard summary small { color: var(--muted); font-weight: 700; }
+.db-tables { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; padding: 0 10px 10px; }
+.db-table { background: var(--surface); border: 2px solid var(--border); border-radius: 10px; padding: 8px 10px; font-family: var(--mono); font-size: 12px; line-height: 1.5; }
+.db-table > b { display: block; font-family: var(--font); font-size: 14px; font-weight: 900; margin-bottom: 2px; color: var(--text); }
+.db-table .col span { font-weight: 600; }
+.db-table .col i { font-style: normal; color: var(--muted); font-size: 11px; }
+.db-table .col.pk span::before { content: '🔑 '; }
+.db-table .col.fk span::before { content: '🔗 '; }
+.db-table .col.pk.fk span::before { content: '🔑🔗 '; }
+.modal-body .dbcard { margin-top: 10px; }

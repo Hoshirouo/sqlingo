@@ -62,6 +62,28 @@
     return out;
   }
   const codeBlock = (code) => { const p = el('pre', 'code'); p.innerHTML = highlight(code); return p; };
+  // Tarjeta con el esquema de una BD (tablas, PK 🔑 y FK 🔗)
+  function dbCard(key, open) {
+    const db = DBS[key];
+    const d = el('details', 'dbcard');
+    d.open = !!open;
+    d.appendChild(el('summary', null, `<span>${db.icon}</span> <b>${esc(db.name)}</b> <small>· ver tablas</small>`));
+    const grid = el('div', 'db-tables');
+    Object.entries(db.tables).forEach(([name, cols]) => {
+      const t = el('div', 'db-table', `<b>${esc(name)}</b>`);
+      cols.forEach((c) => {
+        let txt = c, cls = 'col';
+        if (txt.startsWith('PK ')) { txt = txt.slice(3); cls += ' pk'; }
+        if (txt.includes('→')) cls += ' fk';
+        const [nm, ...rest] = txt.split(' ');
+        t.appendChild(el('div', cls, `<span>${esc(nm)}</span> <i>${esc(rest.join(' '))}</i>`));
+      });
+      grid.appendChild(t);
+    });
+    d.appendChild(grid);
+    return d;
+  }
+
   const looksCode = (s) => /\n|^(SELECT|EXEC|EXECUTE|CALL|RUN|SET|DECLARE|FETCH|CREATE|SHOW|PRINT|DROP|SAVE|BEGIN|TRY|ON |RRHH|Compras|Ventas|@|dbo\.|sys\.|[A-Z_]+\(|'|[\d.]+$|[A-Z_]{4,}(\s|$))/.test(s) && !/^(Porque|Para|Por)/.test(s);
 
   /* ---------- Sonidos ---------- */
@@ -195,6 +217,7 @@
       body.appendChild(el('h4', null, esc(c.h)));
       if (c.p) body.appendChild(el('p', null, c.p));
       if (c.code) body.appendChild(codeBlock(c.code));
+      if (c.dbs) c.dbs.forEach((k) => body.appendChild(dbCard(k, false)));
     });
     body.scrollTop = 0;
     $('#cheatStart').onclick = () => {
@@ -253,6 +276,10 @@
       area.innerHTML = '';
       area.appendChild(el('div', `st-title c-${opts.story.color}`,
         `<span>${opts.story.icon}</span><div><small>Historia · ${esc(opts.story.topic)}</small><b>${esc(opts.story.title)}</b></div>`));
+      if (opts.story.db) {
+        area.appendChild(el('div', 'st-nar', 'Estas son las tablas de esta historia. Puedes abrirlas o cerrarlas cuando quieras 👇'));
+        area.appendChild(dbCard(opts.story.db, true));
+      }
     }
     nextQuestion();
   }
@@ -508,6 +535,7 @@
   function header(q, area) {
     area.appendChild(el('div', 'q-kind', KIND[q.t] + (L.requeued.has(q.id) ? ' · <span style="color:var(--red)">repaso</span>' : '')));
     area.appendChild(el('p', 'q-text', q.q));
+    if (q.db && !(L.story && L.story.db === q.db)) area.appendChild(dbCard(q.db, false));
   }
 
   const RENDER = {
