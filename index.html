@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#58cc02">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="SQLingo">
+  <title>SQLingo · Estudia SQL Server</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon.svg">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800;900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <!-- ============ INICIO ============ -->
+  <main id="home" class="screen">
+    <header class="topbar">
+      <div class="brand"><span class="logo">🦉</span> SQLingo</div>
+      <div class="stats">
+        <span class="stat streak" title="Racha de días"><b id="streak">0</b>🔥</span>
+        <span class="stat xp" title="Experiencia"><b id="xp">0</b>⚡</span>
+        <button class="icon-btn" id="soundBtn" aria-label="Sonido">🔊</button>
+      </div>
+    </header>
+
+    <section class="hero">
+      <h1>Examen de SQL Server</h1>
+      <p>BD <b>Negocios</b> · errores, SP, cursores, funciones, transacciones y triggers</p>
+      <div class="overall"><div class="bar"><i id="overallBar"></i></div><span id="overallTxt">0%</span></div>
+    </section>
+
+    <section class="quick">
+      <button class="card-btn exam" id="examBtn">
+        <span class="ico">📝</span>
+        <span><b>Simulacro de examen</b><small>20 preguntas de todos los temas</small></span>
+      </button>
+      <button class="card-btn review" id="reviewBtn">
+        <span class="ico">🔁</span>
+        <span><b>Repasar mis errores</b><small id="reviewTxt">Aún no tienes errores</small></span>
+      </button>
+    </section>
+
+    <section class="path" id="path"></section>
+
+    <footer class="foot">
+      <button class="link" id="resetBtn">Reiniciar progreso</button>
+      <p>Hecho para estudiar 💚 · de: Sebas</p>
+    </footer>
+  </main>
+
+  <!-- ============ LECCIÓN ============ -->
+  <main id="lesson" class="screen hidden">
+    <header class="lesson-top">
+      <button class="icon-btn close" id="quitBtn" aria-label="Salir">✕</button>
+      <div class="bar big"><i id="lessonBar"></i></div>
+      <span class="hearts"><b id="hearts">5</b>❤️</span>
+    </header>
+
+    <div class="combo hidden" id="combo"></div>
+
+    <section class="q-area" id="qArea"></section>
+
+    <footer class="check-bar" id="checkBar">
+      <button class="btn ghost" id="skipBtn">Saltar</button>
+      <button class="btn primary" id="checkBtn" disabled>Comprobar</button>
+    </footer>
+
+    <div class="sheet" id="sheet">
+      <div class="sheet-inner">
+        <div class="sheet-title"><span id="sheetIcon"></span><b id="sheetTitle"></b></div>
+        <div class="sheet-body" id="sheetBody"></div>
+        <button class="btn" id="nextBtn">Continuar</button>
+      </div>
+    </div>
+  </main>
+
+  <!-- ============ RESULTADO ============ -->
+  <main id="result" class="screen hidden">
+    <div class="result-inner">
+      <div class="result-emoji" id="resEmoji">🎉</div>
+      <h2 id="resTitle">¡Lección completada!</h2>
+      <div class="res-cards">
+        <div class="res-card gold"><small>XP</small><b id="resXp">0</b></div>
+        <div class="res-card green"><small>Precisión</small><b id="resAcc">0%</b></div>
+        <div class="res-card blue"><small>Tiempo</small><b id="resTime">0:00</b></div>
+      </div>
+      <p id="resMsg"></p>
+      <button class="btn primary" id="resContinue">Continuar</button>
+      <button class="btn ghost" id="resRetry">Repetir</button>
+    </div>
+    <canvas id="confetti"></canvas>
+  </main>
+
+  <!-- ============ CHULETA ============ -->
+  <div class="modal hidden" id="cheat">
+    <div class="modal-card">
+      <header>
+        <h3 id="cheatTitle">Chuleta</h3>
+        <button class="icon-btn" id="cheatClose" aria-label="Cerrar">✕</button>
+      </header>
+      <div class="modal-body" id="cheatBody"></div>
+      <footer><button class="btn primary" id="cheatStart">Empezar lección</button></footer>
+    </div>
+  </div>
+
+  <!-- ============ POPOVER UNIDAD ============ -->
+  <div class="pop hidden" id="pop">
+    <div class="pop-card" id="popCard">
+      <b id="popTitle"></b>
+      <small id="popSub"></small>
+      <button class="btn primary" id="popStart">Empezar +XP</button>
+      <button class="btn ghost" id="popCheat">📖 Ver chuleta</button>
+    </div>
+  </div>
+
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
