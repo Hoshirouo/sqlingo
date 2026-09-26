@@ -104,6 +104,17 @@
   const Q_BY_ID = Object.fromEntries(ALL_Q.map((q) => [q.id, q]));
   const TOTAL_LESSONS = UNITS.reduce((s, u) => s + u.lessons.length, 0);
 
+  // Historias: los diálogos vienen como arreglos ['personaje', 'texto', 'código?']
+  STORIES.forEach((st) => {
+    st.steps = st.steps.map((x, i) => {
+      const step = Array.isArray(x) ? { t: 'say', s: x[0], text: x[1], code: x[2] } : x;
+      step.id = `st-${st.id}-${i}`;
+      return step;
+    });
+    st.nQs = st.steps.filter((x) => x.t !== 'say').length;
+  });
+  const TOTAL = TOTAL_LESSONS + STORIES.length;
+
   /* =========================================================
      HOME
      ========================================================= */
@@ -115,7 +126,7 @@
     $('#soundBtn').textContent = S.sound ? '🔊' : '🔇';
 
     const doneCount = Object.keys(S.done).length;
-    const pct = Math.round(doneCount / TOTAL_LESSONS * 100);
+    const pct = Math.min(100, Math.round(doneCount / TOTAL * 100));
     $('#overallBar').style.width = pct + '%';
     $('#overallTxt').textContent = pct + '%';
 
@@ -125,6 +136,16 @@
     $('#reviewTxt').textContent = S.missed.length
       ? `${S.missed.length} pregunta${S.missed.length > 1 ? 's' : ''} por reforzar`
       : 'Aún no tienes errores 😎';
+
+    const grid = $('#storyGrid');
+    grid.innerHTML = '';
+    STORIES.forEach((st) => {
+      const done = S.done['story:' + st.id];
+      const b = el('button', `story-card c-${st.color}` + (done ? ' done' : ''),
+        `<span class="st-ico">${st.icon}</span><b>${esc(st.title)}</b><small>${esc(st.topic)}</small>`);
+      b.onclick = () => startStory(st);
+      grid.appendChild(b);
+    });
 
     const path = $('#path');
     path.innerHTML = '';
@@ -203,25 +224,36 @@
     window.scrollTo(0, 0);
   }
 
+  function startStory(st) {
+    sfx.tap();
+    startLesson(st.steps, { mode: 'story', key: 'story:' + st.id, title: st.title, story: st });
+  }
+
   function startLesson(qs, opts) {
     if (!qs.length) return;
     L = {
       ...opts,
       source: qs,
-      queue: shuffle(qs),
+      queue: opts.mode === 'story' ? qs.slice() : shuffle(qs),
       total: qs.length,
       correct: 0,
       firstTry: 0,
       answered: 0,
       requeued: new Set(),
-      hearts: opts.mode === 'exam' ? Infinity : 5,
+      hearts: opts.mode === 'exam' || opts.mode === 'story' ? Infinity : 5,
       combo: 0,
       start: Date.now(),
       wrongList: [],
     };
-    $('.hearts').classList.toggle('hidden', opts.mode === 'exam');
+    $('.hearts').classList.toggle('hidden', opts.mode === 'exam' || opts.mode === 'story');
     $('#hearts').textContent = 5;
     show('lesson');
+    if (opts.mode === 'story') {
+      const area = $('#qArea');
+      area.innerHTML = '';
+      area.appendChild(el('div', `st-title c-${opts.story.color}`,
+        `<span>${opts.story.icon}</span><div><small>Historia · ${esc(opts.story.topic)}</small><b>${esc(opts.story.title)}</b></div>`));
+    }
     nextQuestion();
   }
 
@@ -236,6 +268,7 @@
     if (!L.queue.length) return finish(true);
     const q = L.queue[0];
     const area = $('#qArea');
+    if (L.mode === 'story') return nextStoryStep(q, area);
     area.innerHTML = '';
     area.style.animation = 'none'; void area.offsetWidth; area.style.animation = '';
     cur = RENDER[q.t](q, area);
@@ -247,10 +280,51 @@
 
   const setReady = (v) => { $('#checkBtn').disabled = !v; };
 
+  function sayBubble(step) {
+    const c = CAST[step.s] || CAST.nar;
+    if (step.s === 'nar') {
+      const n = el('div', 'st-nar', esc(step.text));
+      if (step.code) n.appendChild(codeBlock(step.code));
+      return n;
+    }
+    const row = el('div', 'st-row' + (step.s === 'tu' ? ' me' : ''));
+    row.appendChild(el('div', `st-av c-${c.color}`, c.emoji));
+    const b = el('div', 'st-bubble', `<b class="st-name">${esc(c.name)}</b><span>${esc(step.text)}</span>`);
+    if (step.code) b.appendChild(codeBlock(step.code));
+    row.appendChild(b);
+    return row;
+  }
+
+  function nextStoryStep(q, area) {
+    area.querySelectorAll('.story-q').forEach((w) => w.classList.add('frozen'));
+    if (q.t === 'say') {
+      area.appendChild(sayBubble(q));
+      cur = { q, say: true, check: () => ({ ok: true }) };
+      $('#checkBtn').disabled = false;
+      $('#checkBtn').textContent = 'Continuar';
+      $('#skipBtn').classList.add('hidden');
+    } else {
+      const wrap = el('div', 'story-q');
+      area.appendChild(wrap);
+      cur = RENDER[q.t](q, wrap);
+      cur.q = q;
+      $('#checkBtn').disabled = true;
+      $('#checkBtn').textContent = 'Comprobar';
+      $('#skipBtn').classList.remove('hidden');
+    }
+    requestAnimationFrame(() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }));
+  }
+
   function doCheck() {
     if ($('#checkBtn').disabled || !cur || cur.checked) return;
     cur.checked = true;
     const q = cur.q;
+    if (cur.say) {
+      sfx.tap();
+      L.queue.shift();
+      L.correct++;
+      return nextQuestion();
+    }
     const res = cur.check();
     L.queue.shift();
     L.answered++;
@@ -275,7 +349,7 @@
       }
     } else {
       L.combo = 0;
-      if (!S.missed.includes(q.id)) S.missed.push(q.id);
+      if (L.mode !== 'story' && !S.missed.includes(q.id)) S.missed.push(q.id);
       L.wrongList.push(q);
       sfx.bad();
       sheet.classList.add('bad');
@@ -286,13 +360,13 @@
         pre.textContent = res.answer;
         body.appendChild(pre);
       }
-      if (L.mode !== 'exam') {
+      if (L.mode !== 'exam' && L.mode !== 'story') {
         L.hearts--;
         $('#hearts').textContent = L.hearts;
         const h = $('.hearts'); h.classList.remove('hit'); void h.offsetWidth; h.classList.add('hit');
         if (!L.requeued.has(q.id)) { L.requeued.add(q.id); L.queue.push(q); L.total++; }
       } else {
-        L.correct++; // en el simulacro avanzamos igual
+        L.correct++; // en el simulacro y en las historias avanzamos igual
       }
     }
     if (q.ex) body.appendChild(el('div', 'ex', '💡 ' + q.ex));
@@ -331,7 +405,16 @@
     const unique = L.source.length;
     let acc, xp = 0, title, emoji, msg;
 
-    if (L.mode === 'exam') {
+    if (L.mode === 'story') {
+      const n = L.story.nQs;
+      const good = n - L.wrongList.length;
+      acc = Math.round(good / n * 100);
+      xp = good * 10 + 10;
+      title = '¡Historia completada!';
+      emoji = acc === 100 ? '🏆' : acc >= 70 ? '🎉' : '📖';
+      msg = acc === 100 ? '¡Resolviste todos los problemas de la historia!' : `Acertaste ${good} de ${n}. Léela otra vez para afianzar.`;
+      S.done[L.key] = Math.max(S.done[L.key] || 0, acc === 100 ? 3 : acc >= 70 ? 2 : 1);
+    } else if (L.mode === 'exam') {
       const good = unique - L.wrongList.length;
       acc = Math.round(good / unique * 100);
       xp = good * 5;
@@ -367,7 +450,7 @@
     $('#resAcc').textContent = acc + '%';
     $('#resTime').textContent = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
     $('#resMsg').textContent = msg;
-    const last = { source: L.source, opts: { mode: L.mode, key: L.key, title: L.title } };
+    const last = { source: L.source, opts: { mode: L.mode, key: L.key, title: L.title, story: L.story } };
     $('#resRetry').onclick = () => startLesson(last.opts.mode === 'exam' ? shuffle(ALL_Q.filter((q) => q.unit.id !== 'bd')).slice(0, 20) : last.source, last.opts);
     show('result');
     if (completed && acc >= 60) { sfx.win(); confetti(); } else sfx.bad();
