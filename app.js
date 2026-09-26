@@ -35,9 +35,9 @@
   /* ---------- Almacenamiento ---------- */
   const KEY = 'sqlingo-v1';
   const defaults = { xp: 0, streak: 0, lastDay: null, done: {}, missed: [], sound: true,
-    stats: {}, cases: {}, boltBest: 0, examDate: null, goal: 50, day: null };
+    stats: {}, cases: {}, builds: {}, buildLevel: 1, boltBest: 0, examDate: null, goal: 50, day: null };
   let S = { ...defaults };
-  try { S = { ...defaults, stats: {}, cases: {}, ...JSON.parse(localStorage.getItem(KEY) || '{}') }; } catch (e) { /* sin storage */ }
+  try { S = { ...defaults, stats: {}, cases: {}, builds: {}, ...JSON.parse(localStorage.getItem(KEY) || '{}') }; } catch (e) { /* sin storage */ }
   // Fecha local (no UTC) para que la racha cambie a medianoche en tu hora
   const localDay = (d = new Date()) => new Date(d.getTime() - d.getTimezoneOffset() * 6e4).toISOString().slice(0, 10);
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* ignore */ } };
@@ -264,7 +264,7 @@
   $('#examBtn').onclick = () => startLesson(shuffle(ALL_Q.filter((q) => q.unit.id !== 'bd')).slice(0, 20), { mode: 'exam', title: 'Simulacro' });
   $('#reviewBtn').onclick = () => startLesson(shuffle(S.missed.map((id) => Q_BY_ID[id])).slice(0, 12), { mode: 'review', title: 'Repaso' });
   $('#resetBtn').onclick = () => {
-    if (confirm('¿Borrar todo tu progreso (XP, racha y lecciones)?')) { S = { ...defaults, done: {}, missed: [], stats: {}, cases: {} }; save(); renderHome(); }
+    if (confirm('¿Borrar todo tu progreso (XP, racha y lecciones)?')) { S = { ...defaults, done: {}, missed: [], stats: {}, cases: {}, builds: {} }; save(); renderHome(); }
   };
 
   /* =========================================================
@@ -274,7 +274,7 @@
   let cur = null;   // controlador de la pregunta actual
 
   function show(id) {
-    ['home', 'lesson', 'result', 'cases', 'flash', 'bolt', 'stats', 'express'].forEach((s) => $('#' + s).classList.toggle('hidden', s !== id));
+    ['home', 'lesson', 'result', 'cases', 'flash', 'bolt', 'stats', 'express', 'build'].forEach((s) => $('#' + s).classList.toggle('hidden', s !== id));
     window.scrollTo(0, 0);
   }
 
@@ -1300,6 +1300,7 @@
       const lastLabel = dl == null ? 'Al final' : dl === 1 && !pending.length ? 'Hoy' : dl === 1 ? 'Hoy también' : 'El día antes';
       plan.appendChild(el('div', 'plan-day last', `<b>${lastLabel}</b> 📝 Simulacro + 📄 Resumen de 1 página + ⚡ Relámpago`));
     }
+    if (dl == null || dl > 0) plan.appendChild(el('div', 'plan-day morning', '<b>☀️ Cada mañana</b> 🧱 Construye paso a paso: 1–2 casos (sube de nivel 1 → 2 → 3)'));
     if (!pending.length && (dl == null || dl > 0)) plan.appendChild(el('div', 'plan-day ok', '✅ Ya viste todos los temas express. ¡Ahora simulacro y resumen!'));
     body.appendChild(plan);
 
@@ -1316,6 +1317,8 @@
       b.onclick = () => startExpress(x);
       body.appendChild(b);
     });
+
+    renderBuildSection(body);
   }
 
   function renderSummary() {
@@ -1338,6 +1341,226 @@
     const tip = el('p', 'muted-p', 'Tip: toma captura de esta pantalla para leerla sin internet justo antes del examen.');
     s.appendChild(tip);
   }
+
+
+  /* =========================================================
+     🧱 CONSTRUYE PASO A PASO
+     ========================================================= */
+  // Normalización más flexible para comandos: acepta TRAN/TRANSACTION, PROC/PROCEDURE, etc.
+  const bnorm = (s) => norm(s)
+    .replace(/\bINNER JOIN\b/g, 'JOIN')
+    .replace(/\bCREATE OR ALTER\b/g, 'CREATE')
+    .replace(/\bTRANSACTION\b/g, 'TRAN')
+    .replace(/\bPROCEDURE\b/g, 'PROC')
+    .replace(/\bEXECUTE\b/g, 'EXEC')
+    .replace(/\bOUTPUT\b/g, 'OUT')
+    .replace(/\bDBO\./g, '');
+  const LEVELS = [
+    [1, '💡 Con pista', 'La lógica + la forma del comando'],
+    [2, '🧠 Sin pista', 'Solo la lógica, el comando lo pones tú'],
+    [3, '📄 Hoja en blanco', 'Todo el código de memoria'],
+  ];
+  if (!S.buildLevel) S.buildLevel = 1;
+  let BD = null;
+
+  function renderBuildSection(body) {
+    body.appendChild(el('h3', 'sec-title', '🧱 Construye paso a paso <small>Tú pones la lógica, la app te pide el comando. Ideal para la mañana ☀️</small>'));
+    const lv = el('div', 'levels');
+    LEVELS.forEach(([n, label, sub]) => {
+      const b = el('button', 'level' + (S.buildLevel === n ? ' on' : ''), `<b>${label}</b><small>${sub}</small>`);
+      b.onclick = () => { S.buildLevel = n; save(); renderExpress(); document.querySelector('.levels').scrollIntoView({ block: 'center' }); };
+      lv.appendChild(b);
+    });
+    body.appendChild(lv);
+    BUILDS.forEach((bd) => {
+      const u = unitById(bd.unit);
+      const db = DBS[bd.db];
+      const rec = S.builds[bd.id] || {};
+      const marks = [1, 2, 3].map((n) => rec[n] != null ? (rec[n] === 100 ? '⭐' : '✔️') : '▫️').join('');
+      const b = el('button', 'case-item',
+        `<span class="ci-ico c-${u.color}">${u.icon}</span>
+         <span class="ci-txt"><b>${esc(bd.title)}</b><small>${db.icon} ${esc(db.name)} · ${bd.steps.length} pasos</small></span>
+         <span class="ci-st lv-marks" title="Niveles 1·2·3">${marks}</span>`);
+      b.onclick = () => startBuild(bd, S.buildLevel);
+      body.appendChild(b);
+    });
+    body.appendChild(el('p', 'hint', '▫️ sin hacer · ✔️ hecho · ⭐ perfecto (en orden: nivel 1, 2 y 3)'));
+  }
+
+  function startBuild(bd, level) {
+    BD = { bd, level, i: 0, first: 0, failed: false, done: [] };
+    const scr = $('#buildBody');
+    scr.innerHTML = '';
+    const u = unitById(bd.unit);
+    $('#buildTitle').textContent = `🧱 Nivel ${level}`;
+    scr.appendChild(el('div', `st-title c-${u.color}`, `<span>${u.icon}</span><div><small>${esc(u.title)} · ${LEVELS[level - 1][1]}</small><b>${esc(bd.title)}</b></div>`));
+    scr.appendChild(el('p', 'case-text', bd.text));
+    scr.appendChild(dbCard(bd.db, level === 3));
+    show('build');
+    if (level === 3) return buildBlank(bd, scr);
+
+    scr.appendChild(el('div', 'bar build-bar', '<i id="buildBar"></i>'));
+    scr.appendChild(el('b', 'code-label', 'Tu código'));
+    const pre = el('pre', 'code build-code');
+    pre.id = 'buildCode';
+    pre.innerHTML = '<span class="tk-c">-- aquí se va armando tu código</span>';
+    scr.appendChild(pre);
+    const card = el('div', 'step-card');
+    card.id = 'stepCard';
+    scr.appendChild(card);
+    renderStep();
+  }
+
+  function renderStep() {
+    const { bd, level, i } = BD;
+    $('#buildBar').style.width = (i / bd.steps.length * 100) + '%';
+    if (i >= bd.steps.length) return finishBuild();
+    const [say, hint] = bd.steps[i];
+    const card = $('#stepCard');
+    card.innerHTML = '';
+    BD.failed = false;
+    card.appendChild(el('small', 'step-n', `Paso ${i + 1} de ${bd.steps.length}`));
+    card.appendChild(el('p', 'step-say', esc(say)));
+    if (level === 1) card.appendChild(el('div', 'step-hint', '💡 ' + esc(hint)));
+    const inp = el('input', 'step-input');
+    Object.assign(inp, { type: 'text', autocomplete: 'off', spellcheck: false, placeholder: 'Escribe el comando…' });
+    inp.setAttribute('autocapitalize', 'off');
+    inp.setAttribute('autocorrect', 'off');
+    card.appendChild(inp);
+    const fb = el('div', 'step-fb');
+    card.appendChild(fb);
+    const row = el('div', 'step-btns');
+    const idk = el('button', 'btn ghost-b', 'No me acuerdo');
+    const ok = el('button', 'btn primary', 'Comprobar');
+    row.append(idk, ok);
+    card.appendChild(row);
+    const check = () => {
+      if (!inp.value.trim()) return;
+      const answers = bd.steps[i][2];
+      if (answers.some((a) => bnorm(a) === bnorm(inp.value))) {
+        sfx.ok();
+        if (!BD.failed) BD.first++;
+        addLine(i);
+        BD.i++;
+        renderStep();
+      } else {
+        sfx.bad();
+        miss(false);
+      }
+    };
+    const miss = (gaveUp) => {
+      BD.failed = true;
+      inp.classList.remove('shake'); void inp.offsetWidth; inp.classList.add('shake');
+      fb.className = 'step-fb bad';
+      fb.innerHTML = `${gaveUp ? '👀 Es así' : '✖ No es así'}:<pre></pre><span>Escríbelo tú ahora para grabarlo en la memoria ✍️</span>`;
+      fb.querySelector('pre').textContent = bd.steps[i][2][0];
+      inp.value = '';
+      inp.focus();
+    };
+    ok.onclick = check;
+    idk.onclick = () => { sfx.tap(); miss(true); };
+    inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); check(); } });
+    setTimeout(() => { inp.focus({ preventScroll: true }); card.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 60);
+  }
+
+  function addLine(i) {
+    const [, , ans, indent] = BD.bd.steps[i];
+    BD.done.push('    '.repeat(indent) + ans[0]);
+    $('#buildCode').innerHTML = highlight(BD.done.join('\n'));
+  }
+
+  function saveBuild(pct) {
+    const rec = S.builds[BD.bd.id] || (S.builds[BD.bd.id] = {});
+    rec[BD.level] = Math.max(rec[BD.level] || 0, pct);
+    save();
+  }
+
+  function finishBuild() {
+    const { bd, level, first } = BD;
+    const n = bd.steps.length;
+    const pct = Math.round(first / n * 100);
+    saveBuild(pct);
+    addXp(first * 2);
+    $('#stepCard').remove();
+    buildEnd(pct, `${first} de ${n} pasos a la primera · +${first * 2} XP`);
+  }
+
+  function buildEnd(pct, sub) {
+    const { bd, level } = BD;
+    const scr = $('#buildBody');
+    const end = el('div', 'end-panel');
+    end.innerHTML = `<div class="result-emoji">${pct === 100 ? '🏆' : pct >= 70 ? '🎉' : '💪'}</div>
+      <h2>${pct === 100 ? '¡Perfecto!' : pct >= 70 ? '¡Muy bien!' : '¡Terminado!'}</h2>
+      <p class="muted-p">${sub}</p>`;
+    if (level < 3) {
+      const nx = el('button', 'btn primary', `Subir al nivel ${level + 1} →`);
+      nx.onclick = () => { S.buildLevel = level + 1; save(); startBuild(bd, level + 1); };
+      end.appendChild(nx);
+    }
+    const again = el('button', 'btn', 'Repetir este nivel');
+    again.onclick = () => startBuild(bd, level);
+    const back = el('button', 'btn ghost', 'Volver a Express');
+    back.onclick = () => { renderExpress(); show('express'); };
+    end.append(again, back);
+    scr.appendChild(end);
+    end.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    pct === 100 ? (sfx.win(), confetti()) : sfx.ok();
+  }
+
+  // Nivel 3: hoja en blanco, se revisa paso por paso en orden
+  function buildBlank(bd, scr) {
+    scr.appendChild(el('p', 'hint', 'Escribe todo el código de memoria. Al corregir verás qué pasos tienes y cuáles te faltaron.'));
+    const ta = el('textarea', 'write case-code');
+    ta.placeholder = 'Escribe aquí todo el código…';
+    ta.setAttribute('autocapitalize', 'off');
+    ta.setAttribute('autocorrect', 'off');
+    ta.spellcheck = false;
+    const draftKey = bd.id + ':draft';
+    ta.value = (S.builds[draftKey] && S.builds[draftKey].t) || '';
+    ta.oninput = () => { S.builds[draftKey] = { t: ta.value }; save(); };
+    scr.appendChild(ta);
+    const b = el('button', 'btn primary', '👀 Corregir');
+    b.style.marginTop = '12px';
+    scr.appendChild(b);
+    b.onclick = () => {
+      b.remove();
+      ta.readOnly = true;
+      const code = bnorm(ta.value.replace(/--[^\n]*/g, ' '));
+      let pos = 0, hits = 0;
+      const ul = el('ul', 'checklist');
+      bd.steps.forEach(([say, , ans]) => {
+        let found = -1, len = 0;
+        for (const a of ans) {
+          const na = bnorm(a).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          const raw = bnorm(a);
+          const pre = /^[A-Z0-9_@]/.test(raw) ? '(^|[^A-Z0-9_@])' : '()';
+          const post = /[A-Z0-9_]$/.test(raw) ? '(?![A-Z0-9_])' : '';
+          const re = new RegExp(pre + na + post, 'g');
+          re.lastIndex = Math.max(0, pos - 1); // el separador anterior puede reutilizarse
+          const m = re.exec(code);
+          if (m && (found < 0 || m.index < found)) { found = m.index; len = m[0].length; }
+        }
+        const ok = found >= 0;
+        if (ok) { hits++; pos = found + len; }
+        const li = el('li', ok ? 'ok' : 'miss', `${ok ? '✅' : '⬜'} ${esc(say)}`);
+        if (!ok) { const p = el('code'); p.textContent = ans[0]; li.appendChild(el('br')); li.appendChild(p); }
+        ul.appendChild(li);
+      });
+      const pct = Math.round(hits / bd.steps.length * 100);
+      const res = el('div', 'case-result');
+      res.appendChild(el('h3', null, `${pct === 100 ? '🏆' : pct >= 70 ? '👍' : '📚'} ${hits} de ${bd.steps.length} pasos correctos y en orden`));
+      res.appendChild(ul);
+      res.appendChild(el('b', null, 'Solución'));
+      res.appendChild(codeBlock(bd.steps.map(([, , a, ind]) => '    '.repeat(ind) + a[0]).join('\n')));
+      scr.appendChild(res);
+      saveBuild(pct);
+      addXp(hits * 3);
+      buildEnd(pct, `+${hits * 3} XP`);
+      res.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
+  }
+
+  $('#build [data-back]').onclick = () => { renderExpress(); show('express'); };
 
   /* ---------- Inicio ---------- */
   renderHome();
