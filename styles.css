@@ -512,3 +512,33 @@ ul.tips { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
 .topic-row .bar { grid-column: 1; height: 10px; }
 .topic-row small { grid-column: 1; color: var(--muted); font-weight: 700; }
 .mini-btn { grid-column: 2; grid-row: 1 / span 3; padding: 8px 12px; border-radius: 12px; border: 2px solid var(--border); box-shadow: 0 3px 0 var(--border); color: var(--blue); font-weight: 900; font-size: 13px; text-transform: uppercase; }
+
+/* ================= Modo Express ================= */
+.express-card {
+  width: 100%; margin-top: 16px; display: flex; align-items: center; gap: 14px; text-align: left;
+  padding: 16px; border-radius: 20px; color: #fff;
+  background: linear-gradient(135deg, #ce82ff, #1cb0f6);
+  box-shadow: 0 5px 0 #8a5cc2;
+}
+.express-card:active { transform: translateY(5px); box-shadow: none; }
+.express-card .ex-ico { font-size: 38px; width: 60px; height: 60px; flex: none; display: grid; place-items: center; border-radius: 16px; background: rgba(255,255,255,.22); animation: bounce 1.2s infinite alternate; }
+.express-card b { display: block; font-size: 20px; font-weight: 900; }
+.express-card small { display: block; font-weight: 700; opacity: .95; }
+.express-card em { display: inline-block; margin-top: 6px; font-style: normal; font-weight: 800; font-size: 12.5px; background: rgba(0,0,0,.18); padding: 3px 8px; border-radius: 99px; }
+
+.plan { border: 2px solid var(--border); border-radius: var(--radius); padding: 12px; display: grid; gap: 8px; margin: 4px 0 14px; }
+.plan-head { font-weight: 800; line-height: 1.4; }
+.plan-head b { color: var(--red); }
+.plan-day { background: var(--surface-2); border-radius: 12px; padding: 10px 12px; font-weight: 700; line-height: 1.45; }
+.plan-day b { display: block; color: var(--purple-d); font-weight: 900; font-size: 13px; text-transform: uppercase; letter-spacing: .5px; }
+.plan-day.last b { color: var(--yellow-d); }
+.plan-day.ok { background: var(--green-bg); color: var(--green-d); }
+.case-item.done { opacity: .75; }
+
+.exam-steps { margin: 0 0 16px; padding-left: 22px; display: grid; gap: 8px; font-weight: 700; line-height: 1.45; }
+.sum-card { border: 2px solid var(--c); border-radius: var(--radius); padding: 12px 14px; margin-bottom: 14px; }
+.sum-card h3 { margin: 0 0 6px; font-size: 19px; font-weight: 900; }
+.sum-card p { margin: 0 0 8px; font-weight: 600; line-height: 1.45; }
+.sum-card .sig { background: var(--blue-bg); padding: 8px 10px; border-radius: 10px; }
+.sum-card .trap { background: var(--red-bg); padding: 8px 10px; border-radius: 10px; }
+.sum-card pre.code { font-size: 12.5px; margin-bottom: 8px; }

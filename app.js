@@ -146,6 +146,26 @@
   });
   const TOTAL = TOTAL_LESSONS + STORIES.length;
 
+  // Express: se arma como una historia con el “Profe Express”
+  EXPRESS.forEach((x) => {
+    x.express = true;
+    x.topic = 'Modo Express';
+    const intro = [
+      ['profe', x.what],
+      ['profe', '🧭 Te lo van a pedir cuando el enunciado dice: ' + x.signal],
+      ['profe', '🧩 Plantilla. Memoriza esta forma:', x.code],
+      ['profe', '⚠️ Trampa típica del examen: ' + x.trap],
+      ['nar', 'Ahora comprueba que lo entendiste 👇'],
+    ];
+    x.steps = [...intro, ...x.qs].map((s, i) => {
+      const step = Array.isArray(s) ? { t: 'say', s: s[0], text: s[1], code: s[2] } : s;
+      step.id = `ex-${x.id}-${i}`;
+      step.unitId = x.unit;
+      return step;
+    });
+    x.nQs = x.qs.length;
+  });
+
   /* =========================================================
      HOME
      ========================================================= */
@@ -155,9 +175,10 @@
     $('#xp').textContent = S.xp;
     $('#streak').textContent = S.streak;
     renderGoal();
+    renderExpressBtn();
     $('#soundBtn').textContent = S.sound ? '🔊' : '🔇';
 
-    const doneCount = Object.keys(S.done).length;
+    const doneCount = Object.keys(S.done).filter((k) => !k.startsWith('express:')).length;
     const pct = Math.min(100, Math.round(doneCount / TOTAL * 100));
     $('#overallBar').style.width = pct + '%';
     $('#overallTxt').textContent = pct + '%';
@@ -253,7 +274,7 @@
   let cur = null;   // controlador de la pregunta actual
 
   function show(id) {
-    ['home', 'lesson', 'result', 'cases', 'flash', 'bolt', 'stats'].forEach((s) => $('#' + s).classList.toggle('hidden', s !== id));
+    ['home', 'lesson', 'result', 'cases', 'flash', 'bolt', 'stats', 'express'].forEach((s) => $('#' + s).classList.toggle('hidden', s !== id));
     window.scrollTo(0, 0);
   }
 
@@ -285,7 +306,7 @@
       const area = $('#qArea');
       area.innerHTML = '';
       area.appendChild(el('div', `st-title c-${opts.story.color}`,
-        `<span>${opts.story.icon}</span><div><small>Historia · ${esc(opts.story.topic)}</small><b>${esc(opts.story.title)}</b></div>`));
+        `<span>${opts.story.icon}</span><div><small>${opts.story.express ? '🚀 Modo Express' : 'Historia · ' + esc(opts.story.topic)}</small><b>${esc(opts.story.title)}</b></div>`));
       if (opts.story.db) {
         area.appendChild(el('div', 'st-nar', 'Estas son las tablas de esta historia. Puedes abrirlas o cerrarlas cuando quieras 👇'));
         area.appendChild(dbCard(opts.story.db, true));
@@ -452,9 +473,9 @@
       const good = n - L.wrongList.length;
       acc = Math.round(good / n * 100);
       xp = good * 10 + 10;
-      title = '¡Historia completada!';
+      title = L.story.express ? '¡Tema listo! 🚀' : '¡Historia completada!';
       emoji = acc === 100 ? '🏆' : acc >= 70 ? '🎉' : '📖';
-      msg = acc === 100 ? '¡Resolviste todos los problemas de la historia!' : `Acertaste ${good} de ${n}. Léela otra vez para afianzar.`;
+      msg = acc === 100 ? (L.story.express ? '¡Lo entendiste! Sigue con el siguiente tema.' : '¡Resolviste todos los problemas de la historia!') : `Acertaste ${good} de ${n}. Léela otra vez para afianzar.`;
       S.done[L.key] = Math.max(S.done[L.key] || 0, acc === 100 ? 3 : acc >= 70 ? 2 : 1);
     } else if (L.mode === 'exam') {
       const good = unique - L.wrongList.length;
@@ -497,7 +518,12 @@
     show('result');
     if (completed && acc >= 60) { sfx.win(); confetti(); } else sfx.bad();
   }
-  $('#resContinue').onclick = () => { L = null; renderHome(); show('home'); };
+  $('#resContinue').onclick = () => {
+    const exp = L && L.story && L.story.express;
+    L = null;
+    renderHome();
+    if (exp) { renderExpress(); show('express'); } else show('home');
+  };
 
   function bumpStreak() {
     const d = new Date();
@@ -1215,6 +1241,102 @@
     home.onclick = goHome;
     e.append(again, home);
     if (newBest && B.score > 0) { sfx.win(); confetti(); }
+  }
+
+
+  /* =========================================================
+     MODO EXPRESS
+     ========================================================= */
+  $('#expressBtn').onclick = () => { renderExpress(); show('express'); };
+  $('#express [data-back]').onclick = () => {
+    if (!$('#expSummary').classList.contains('hidden')) { renderExpress(); window.scrollTo(0, 0); }
+    else goHome();
+  };
+  const expDone = (x) => !!S.done['express:' + x.id];
+
+  function daysLeft() {
+    if (!S.examDate) return null;
+    return Math.round((new Date(S.examDate + 'T00:00') - new Date(localDay() + 'T00:00')) / 864e5);
+  }
+
+  function renderExpressBtn() {
+    const n = EXPRESS.filter(expDone).length;
+    $('#expressProg').textContent = n === EXPRESS.length ? '✅ Completado · repasa el resumen' : `${n} de ${EXPRESS.length} temas · ≈ ${EXPRESS.reduce((s, x) => s + x.min, 0)} min en total`;
+  }
+
+  function startExpress(x) {
+    startLesson(x.steps, { mode: 'story', key: 'express:' + x.id, title: x.title, story: x });
+  }
+
+  function renderExpress() {
+    $('#expSummary').classList.add('hidden');
+    const body = $('#expMain');
+    body.classList.remove('hidden');
+    body.innerHTML = '';
+    const pending = EXPRESS.filter((x) => !expDone(x));
+    const dl = daysLeft();
+
+    body.appendChild(el('p', 'muted-p', 'Lo <b>mínimo</b> para entender cada tema: qué es, cómo te lo piden en el enunciado, la plantilla y la trampa típica. Luego 3–4 preguntas rápidas.'));
+
+    // Plan por días
+    const plan = el('div', 'plan');
+    let head;
+    if (dl == null) head = '📅 Pon la fecha del examen en el inicio y te armo el plan por días. Por ahora, este es el orden:';
+    else if (dl <= 0) head = dl === 0 ? '🍀 ¡Hoy es el examen! Lee solo el resumen de 1 página.' : '📅 La fecha del examen ya pasó. Cámbiala en el inicio.';
+    else head = `📅 Te quedan <b>${dl} día${dl > 1 ? 's' : ''}</b>. Tu plan:`;
+    plan.appendChild(el('div', 'plan-head', head));
+
+    const studyDays = dl == null ? 1 : Math.max(1, dl - 1);
+    const days = [];
+    if (dl == null || dl > 0) {
+      const per = Math.ceil(pending.length / studyDays) || 0;
+      for (let i = 0; i < studyDays && i * per < pending.length; i++) days.push(pending.slice(i * per, (i + 1) * per));
+    }
+    days.forEach((items, i) => {
+      const label = dl == null ? 'Orden recomendado' : i === 0 ? 'Hoy' : i === 1 ? 'Mañana' : `Día ${i + 1}`;
+      plan.appendChild(el('div', 'plan-day', `<b>${label}</b> ${items.map((x) => `${x.icon} ${esc(x.title.replace(/ en \d+ minutos/, ''))}`).join(' · ')}`));
+    });
+    if (dl == null || dl > 0) {
+      const lastLabel = dl == null ? 'Al final' : dl === 1 && !pending.length ? 'Hoy' : dl === 1 ? 'Hoy también' : 'El día antes';
+      plan.appendChild(el('div', 'plan-day last', `<b>${lastLabel}</b> 📝 Simulacro + 📄 Resumen de 1 página + ⚡ Relámpago`));
+    }
+    if (!pending.length && (dl == null || dl > 0)) plan.appendChild(el('div', 'plan-day ok', '✅ Ya viste todos los temas express. ¡Ahora simulacro y resumen!'));
+    body.appendChild(plan);
+
+    const sb = el('button', 'btn primary', '📄 Resumen de 1 página');
+    sb.onclick = renderSummary;
+    body.appendChild(sb);
+
+    body.appendChild(el('h3', 'sec-title', 'Temas <small>en este orden</small>'));
+    EXPRESS.forEach((x, i) => {
+      const b = el('button', 'case-item' + (expDone(x) ? ' done' : ''),
+        `<span class="ci-ico c-${x.color}">${x.icon}</span>
+         <span class="ci-txt"><b>${i + 1}. ${esc(x.title)}</b><small>⏱ ${x.min} min · ${x.qs.length} preguntas</small></span>
+         <span class="ci-st">${expDone(x) ? '✅' : '▶️'}</span>`);
+      b.onclick = () => startExpress(x);
+      body.appendChild(b);
+    });
+  }
+
+  function renderSummary() {
+    $('#expMain').classList.add('hidden');
+    const s = $('#expSummary');
+    s.classList.remove('hidden');
+    s.innerHTML = '';
+    window.scrollTo(0, 0);
+    s.appendChild(el('h3', 'sec-title', '🎯 Cómo atacar cualquier ejercicio'));
+    s.appendChild(el('ol', 'exam-steps', EXAM_STEPS.map((t) => `<li>${t}</li>`).join('')));
+    EXPRESS.filter((x) => x.id !== 'mapa').forEach((x) => {
+      const card = el('section', `sum-card c-${x.color}`);
+      card.appendChild(el('h3', null, `${x.icon} ${esc(x.title.replace(/ en \d+ minutos/, ''))}`));
+      card.appendChild(el('p', null, esc(x.what)));
+      card.appendChild(el('p', 'sig', '<b>🧭 Te lo piden así:</b> ' + esc(x.signal)));
+      card.appendChild(codeBlock(x.code));
+      card.appendChild(el('p', 'trap', '<b>⚠️ Trampa:</b> ' + esc(x.trap)));
+      s.appendChild(card);
+    });
+    const tip = el('p', 'muted-p', 'Tip: toma captura de esta pantalla para leerla sin internet justo antes del examen.');
+    s.appendChild(tip);
   }
 
   /* ---------- Inicio ---------- */

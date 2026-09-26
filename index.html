@@ -35,6 +35,11 @@
       <div class="overall"><div class="bar"><i id="overallBar"></i></div><span id="overallTxt">0%</span></div>
     </section>
 
+    <button class="express-card" id="expressBtn">
+      <span class="ex-ico">🚀</span>
+      <span><b>Modo Express</b><small>¿Examen en pocos días? Entiende lo esencial rápido</small><em id="expressProg"></em></span>
+    </button>
+
     <section class="goal">
       <div class="goal-row"><span>🎯 Meta de hoy</span><b id="goalTxt">0 / 50 XP</b></div>
       <div class="bar"><i id="goalBar"></i></div>
@@ -155,6 +160,13 @@
     <div id="boltEnd" class="end-panel hidden"></div>
   </main>
 
+  <!-- ============ EXPRESS ============ -->
+  <main id="express" class="screen hidden">
+    <header class="sub-top"><button class="icon-btn" data-back aria-label="Volver">←</button><h2>🚀 Modo Express</h2></header>
+    <div id="expMain"></div>
+    <div id="expSummary" class="hidden"></div>
+  </main>
+
   <!-- ============ PROGRESO ============ -->
   <main id="stats" class="screen hidden">
     <header class="sub-top"><button class="icon-btn" data-home aria-label="Volver">←</button><h2>📊 Mi progreso</h2></header>
@@ -188,6 +200,7 @@
   <script src="extra.js"></script>
   <script src="stories.js"></script>
   <script src="practice.js"></script>
+  <script src="express.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
